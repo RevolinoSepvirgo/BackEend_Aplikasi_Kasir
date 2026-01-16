@@ -25,6 +25,15 @@ const User = sequelize.define('User', {
   }
 });
 
+// Health Check Endpoint
+app.get('/', (req, res) => {
+    res.json({ 
+        status: "API Ready", 
+        service: "User Service (Node.js)",
+        database: "PostgreSQL Connected"
+    });
+});
+
 // Sync DB
 sequelize.sync({ alter: true }).then(async () => {
   console.log('✅ Postgres Database synced');

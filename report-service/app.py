@@ -17,6 +17,14 @@ def verify_token(token):
     except:
         return None
 
+# Health Check Endpoint
+@app.route('/')
+def health_check():
+    return jsonify({
+        "status": "API Ready",
+        "service": "Report Service (Python Flask)",
+        "database": "Redis Connected"
+    })
 # Endpoint untuk menerima data dari Java (Internal)
 @app.route('/api/reports/sync', methods=['POST'])
 def sync():

@@ -39,6 +39,18 @@ if ($resource === 'uploads' && $action === 'view' && $id) {
     http_response_code(404);
     die(json_encode(["error" => "Gambar tidak ditemukan"]));
 }
+// --- 2. HEALTH CHECK ENDPOINT (Tanpa Auth) ---
+
+$path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+$trimmedPath = trim($path, '/');
+
+if ($trimmedPath === '' || $trimmedPath === 'index.php') {
+    die(json_encode([
+        "status" => "API Ready",
+        "service" => "Product Service (Vanilla PHP)",
+        "database" => "MySQL Connected"
+    ]));
+}
 
 // --- 2. VALIDASI TOKEN (Untuk semua API lainnya) ---
 if (!$authHeader) {
