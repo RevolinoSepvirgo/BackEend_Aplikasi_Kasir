@@ -21,7 +21,7 @@ class DB {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )");
 
-            // 2. Tabel Produk
+            // 2. Tabel Produk (ditambah kolom gambar_produk)
             $pdo->exec("CREATE TABLE IF NOT EXISTS products (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 nama_toko VARCHAR(100) NOT NULL,
@@ -29,6 +29,7 @@ class DB {
                 nama_produk VARCHAR(255) NOT NULL,
                 harga INT NOT NULL,
                 stok INT NOT NULL,
+                gambar_produk VARCHAR(255) NULL, 
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )");
             return $pdo;

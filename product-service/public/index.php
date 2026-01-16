@@ -6,16 +6,46 @@ use App\CategoryController;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
+header("Access-Control-Allow-Origin: *");
 header("Content-Type: application/json");
+header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization");
 
-// 1. Ambil Header & Token
+// Handle preflight request OPTIONS
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    exit;
+}
+
 $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
+$method = $_SERVER['REQUEST_METHOD'];
+$path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+$parts = explode('/', trim($path, '/'));
+
+$resource = $parts[0] ?? '';
+$id = $parts[1] ?? null;
+$action = $parts[2] ?? null;
+
+// --- 1. ENDPOINT VIEW GAMBAR (Tanpa Auth) ---
+if ($resource === 'uploads' && $action === 'view' && $id) {
+    $uploadDir = __DIR__ . '/uploads/';
+    $filename = basename($id); 
+    $filepath = $uploadDir . $filename;
+
+    if (file_exists($filepath) && is_file($filepath)) {
+        header('Content-Type: image/' . pathinfo($filepath, PATHINFO_EXTENSION));
+        readfile($filepath);
+        exit;
+    }
+    http_response_code(404);
+    die(json_encode(["error" => "Gambar tidak ditemukan"]));
+}
+
+// --- 2. VALIDASI TOKEN (Untuk semua API lainnya) ---
 if (!$authHeader) {
     http_response_code(401);
     die(json_encode(["error" => "Token missing"]));
 }
 
-// 2. Decode Token
 try {
     $token = str_replace('Bearer ', '', $authHeader);
     $decoded = JWT::decode($token, new Key(getenv('JWT_SECRET'), 'HS256'));
@@ -24,18 +54,14 @@ try {
     die(json_encode(["error" => "Invalid Token"]));
 }
 
-// 3. Ambil Method & Path URL
-$method = $_SERVER['REQUEST_METHOD'];
-$path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-$parts = explode('/', trim($path, '/'));
+// Parse input data
+if (strpos($_SERVER['CONTENT_TYPE'] ?? '', 'multipart/form-data') !== false) {
+    $data = $_POST;
+} else {
+    $data = json_decode(file_get_contents("php://input"), true);
+}
 
-// Misal URL: /products/5 -> $resource = 'products', $id = 5
-$resource = $parts[0] ?? '';
-$id = $parts[1] ?? null;
-
-$data = json_decode(file_get_contents("php://input"), true);
-
-// 4. Arahkan ke Controller
+// --- 3. ROUTING KE CONTROLLER ---
 if ($resource === 'categories') {
     $ctrl = new CategoryController();
     switch ($method) {
@@ -45,10 +71,24 @@ if ($resource === 'categories') {
         case 'DELETE': $ctrl->delete($decoded, $id); break;
         default: http_response_code(405); break;
     }
-} elseif ($resource === 'products') {
+} 
+elseif ($resource === 'products') {
     $ctrl = new ProductController();
+
+    // Jalur khusus: POST /products/reduce-stock
+    if ($id === 'reduce-stock' && $method === 'POST') {
+        $ctrl->reduceStock($decoded, $data);
+        exit;
+    }
+
     switch ($method) {
-        case 'GET':    $ctrl->getAll($decoded); break;
+        case 'GET':
+            if ($id) {
+                $ctrl->getById($decoded, $id);
+            } else {
+                $ctrl->getAll($decoded);
+            }
+            break;
         case 'POST':   $ctrl->create($decoded, $data); break;
         case 'PUT':    $ctrl->update($decoded, $id, $data); break;
         case 'DELETE': $ctrl->delete($decoded, $id); break;
