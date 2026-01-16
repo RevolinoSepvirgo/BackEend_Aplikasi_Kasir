@@ -4,14 +4,37 @@ use PDO;
 
 class ProductController {
     private $db;
-    public function __construct() { $this->db = DB::connect(); }
+    private $imgBaseUrl;
+
+    public function __construct() { 
+        $this->db = DB::connect(); 
+        
+        // Ambil domain server secara dinamis
+        $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? "https" : "http";
+        $host = $_SERVER['HTTP_HOST'];
+        // URL ini mengarah ke endpoint view gambar di index.php
+        $this->imgBaseUrl = "$protocol://$host/index.php/uploads/view/";
+    }
+
+    // Fungsi pembantu untuk mengubah nama file menjadi URL lengkap
+    private function transformProduct($product) {
+        if (!empty($product['gambar_produk'])) {
+            $product['gambar_produk'] = $this->imgBaseUrl . $product['gambar_produk'];
+        }
+        return $product;
+    }
 
     public function getAll($user) {
         $stmt = $this->db->prepare("SELECT p.*, c.nama_kategori FROM products p 
                                     LEFT JOIN categories c ON p.category_id = c.id 
                                     WHERE p.nama_toko = ?");
         $stmt->execute([$user->nama_toko]);
-        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+        $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Ubah semua gambar menjadi URL lengkap
+        $output = array_map([$this, 'transformProduct'], $results);
+        
+        echo json_encode($output);
     }
 
     public function getById($user, $id) {
@@ -20,11 +43,13 @@ class ProductController {
                                     WHERE p.id = ? AND p.nama_toko = ?");
         $stmt->execute([$id, $user->nama_toko]);
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        
         if (!$result) {
             http_response_code(404);
             die(json_encode(["error" => "Produk tidak ditemukan"]));
         }
-        echo json_encode($result);
+
+        echo json_encode($this->transformProduct($result));
     }
 
     public function create($user, $data) {
@@ -65,7 +90,6 @@ class ProductController {
         echo json_encode(["message" => "Produk berhasil dihapus"]);
     }
 
-    // --- FITUR KURANGI STOK (DIPANGGIL OLEH JAVA) ---
     public function reduceStock($user, $data) {
         if (!isset($data['items']) || !is_array($data['items'])) {
             http_response_code(400);
@@ -78,7 +102,6 @@ class ProductController {
                 $id_produk = $item['id_produk'];
                 $qty = (int)$item['qty'];
 
-                // Update stok hanya jika stok cukup (stok >= qty)
                 $stmt = $this->db->prepare("UPDATE products SET stok = stok - ? WHERE id = ? AND nama_toko = ? AND stok >= ?");
                 $stmt->execute([$qty, $id_produk, $user->nama_toko, $qty]);
 

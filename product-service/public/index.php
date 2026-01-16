@@ -11,48 +11,51 @@ header("Content-Type: application/json");
 header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization");
 
-// Handle preflight request OPTIONS
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
 $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
 $method = $_SERVER['REQUEST_METHOD'];
+
+// --- PERBAIKAN ROUTING ---
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+// Menghapus 'index.php' dari path jika ada
+$path = str_replace('/index.php', '', $path);
 $parts = explode('/', trim($path, '/'));
 
-$resource = $parts[0] ?? '';
-$id = $parts[1] ?? null;
-$action = $parts[2] ?? null;
+$resource = $parts[0] ?? ''; // Contoh: 'products' atau 'uploads'
+$id = $parts[1] ?? null;     // Contoh: '1' atau 'view'
+$extra = $parts[2] ?? null;  // Contoh: 'nama_gambar.jpg'
 
 // --- 1. ENDPOINT VIEW GAMBAR (Tanpa Auth) ---
-if ($resource === 'uploads' && $action === 'view' && $id) {
+// URL: domain.com/index.php/uploads/view/nama_file.jpg
+if ($resource === 'uploads' && $id === 'view' && $extra) {
     $uploadDir = __DIR__ . '/uploads/';
-    $filename = basename($id); 
+    $filename = basename($extra); 
     $filepath = $uploadDir . $filename;
 
     if (file_exists($filepath) && is_file($filepath)) {
-        header('Content-Type: image/' . pathinfo($filepath, PATHINFO_EXTENSION));
+        $ext = strtolower(pathinfo($filepath, PATHINFO_EXTENSION));
+        $mime = ($ext === 'jpg' || $ext === 'jpeg') ? 'image/jpeg' : 'image/' . $ext;
+        header('Content-Type: $mime');
         readfile($filepath);
         exit;
     }
     http_response_code(404);
     die(json_encode(["error" => "Gambar tidak ditemukan"]));
 }
-// --- 2. HEALTH CHECK ENDPOINT (Tanpa Auth) ---
 
-$path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-$trimmedPath = trim($path, '/');
-
-if ($trimmedPath === '' || $trimmedPath === 'index.php') {
+// --- 2. HEALTH CHECK ---
+if ($resource === '' || $resource === 'index.php') {
     die(json_encode([
         "status" => "API Ready",
-        "service" => "Product Service (Vanilla PHP)",
+        "service" => "Product Service",
         "database" => "MySQL Connected"
     ]));
 }
 
-// --- 2. VALIDASI TOKEN (Untuk semua API lainnya) ---
+// --- 3. VALIDASI TOKEN ---
 if (!$authHeader) {
     http_response_code(401);
     die(json_encode(["error" => "Token missing"]));
@@ -73,7 +76,7 @@ if (strpos($_SERVER['CONTENT_TYPE'] ?? '', 'multipart/form-data') !== false) {
     $data = json_decode(file_get_contents("php://input"), true);
 }
 
-// --- 3. ROUTING KE CONTROLLER ---
+// --- 4. ROUTING KE CONTROLLER ---
 if ($resource === 'categories') {
     $ctrl = new CategoryController();
     switch ($method) {
@@ -87,7 +90,6 @@ if ($resource === 'categories') {
 elseif ($resource === 'products') {
     $ctrl = new ProductController();
 
-    // Jalur khusus: POST /products/reduce-stock
     if ($id === 'reduce-stock' && $method === 'POST') {
         $ctrl->reduceStock($decoded, $data);
         exit;
@@ -95,7 +97,7 @@ elseif ($resource === 'products') {
 
     switch ($method) {
         case 'GET':
-            if ($id) {
+            if ($id && is_numeric($id)) {
                 $ctrl->getById($decoded, $id);
             } else {
                 $ctrl->getAll($decoded);
